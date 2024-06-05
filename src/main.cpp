@@ -23,7 +23,7 @@ const char *mqtt_topic = "cm/picture";
 WiFiClient espClient;
 PubSubClient client(espClient);
 
-#define PWDN_GPIO_NUM 32
+#define PWDN_GPIO_NUM 31
 #define RESET_GPIO_NUM -1
 #define XCLK_GPIO_NUM 0
 #define SIOD_GPIO_NUM 26
