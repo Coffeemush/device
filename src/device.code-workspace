@@ -1,0 +1,20 @@
+{
+	"folders": [
+		{
+			"path": "../../../../../../../../CoffeeMush_Programmation/device"
+		},
+		{
+			"name": "ESP32-C3",
+			"path": "../../ESP32-C3"
+		},
+		{
+			"name": "ArduinoUno",
+			"path": "../../ArduinoUno"
+		},
+		{
+			"name": "ESP32-CAM2",
+			"path": ".."
+		}
+	],
+	"settings": {}
+}
