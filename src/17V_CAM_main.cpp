@@ -364,9 +364,7 @@ void callback(char* topic, byte* message, unsigned int length) {
 
 void take_picture() {
     camera_fb_t *fb = NULL;
-    if (flash) {
-        digitalWrite(LED_BUILTIN, HIGH);
-    };
+    set_flash();   
     Serial.println("Taking picture...");
     fb = esp_camera_fb_get(); // used to get a single picture.
     if (!fb) {
