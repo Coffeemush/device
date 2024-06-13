@@ -1,0 +1,15 @@
+{
+    "files.associations": {
+        "atomic": "cpp",
+        "cstddef": "cpp",
+        "cwchar": "cpp",
+        "string": "cpp",
+        "functional": "cpp",
+        "memory": "cpp",
+        "string_view": "cpp",
+        "type_traits": "cpp",
+        "cmath": "cpp",
+        "new": "cpp",
+        "utility": "cpp"
+    }
+}

@@ -1,12 +1,12 @@
+#include "esp_camera.h"
+//#include "SensorAliases.h"
 #include <Wire.h>
 #include <Adafruit_Sensor.h>
 #include <Adafruit_TSL2561_U.h>
 #include "SHT2x.h"
 #include <WiFi.h>
 #include <PubSubClient.h>
-#include <esp_camera.h>
 #include <esp_http_server.h>
-#include "camera_pins.h"
 
 // WiFi credentials
 const char* ssid = "LAPTOP-INL7NVL4 4267";
@@ -33,7 +33,7 @@ Adafruit_TSL2561_Unified tsl = Adafruit_TSL2561_Unified(TSL2561_ADDR_FLOAT, 1234
 
 // Define pin numbers
 const int switchPin = 13; // Water float switch
-const int fanPin = 4;     // Fan
+const int fanPin = 4;    // Fan (changed from 4 to 16)
 const int valvePin = 12;  // Solenoid valve
 
 // WiFi and MQTT clients
@@ -42,7 +42,7 @@ PubSubClient client(espClient);
 
 // Timing variables
 unsigned long previousMillis = 0;
-const long interval = 500; // Interval for loop execution
+const long interval = 2000; // Interval for loop execution
 
 bool tempRequested = false;
 
@@ -57,6 +57,10 @@ const unsigned long operationDuration = 5000; // Operation duration in milliseco
 
 bool fanRunning = false;
 bool valveRunning = false;
+
+// Camera configuration
+#define CAMERA_MODEL_AI_THINKER
+#include "camera_pins.h"
 
 // Flash
 #define LED_BUILTIN 4
@@ -251,13 +255,12 @@ void setup() {
 
     setup_wifi();
     client.setServer(mqtt_server, mqtt_port);
-    client.setCallback(callback);
     client.setBufferSize(MAX_PAYLOAD); // This is the maximum payload length
+    client.setCallback(callback);
 
     // Camera setup
     pinMode(LED_BUILTIN, OUTPUT);
 
-    // Config Camera Settings
     camera_config_t config;
     config.ledc_channel = LEDC_CHANNEL_0;
     config.ledc_timer = LEDC_TIMER_0;
@@ -292,18 +295,17 @@ void setup() {
 
     flash = true;
 
-    // Camera init
     esp_err_t err = esp_camera_init(&config);
     if (err != ESP_OK) {
         Serial.printf("Camera init failed with error 0x%x", err);
         return;
     }
 
-    sensor_t *s = esp_camera_sensor_get();
+    sensor_t_esp *s = esp_camera_sensor_get();
     if (s->id.PID == OV3660_PID) {
-        s->set_vflip(s, 1);       // Flip it back
-        s->set_brightness(s, 1);  // Up the brightness just a bit
-        s->set_saturation(s, -2); // Lower the saturation
+        s->set_vflip(s, 1);       // flip it back
+        s->set_brightness(s, 1);  // up the brightness just a bit
+        s->set_saturation(s, -2); // lower the saturation
     }
     s->set_framesize(s, FRAMESIZE_QVGA);
 
@@ -345,8 +347,7 @@ void loop() {
     }
 }
 
-// Camera functions
-
+// Camera-related functions
 void callback(char* topic, byte* message, unsigned int length) {
     String messageTemp;
     Serial.println(topic);
@@ -365,9 +366,9 @@ void take_picture() {
     camera_fb_t *fb = NULL;
     if (flash) {
         digitalWrite(LED_BUILTIN, HIGH);
-    }
-    Serial.println("Taking picture");
-    fb = esp_camera_fb_get(); // Used to get a single picture.
+    };
+    Serial.println("Taking picture...");
+    fb = esp_camera_fb_get(); // used to get a single picture.
     if (!fb) {
         Serial.println("Camera capture failed");
         return;
@@ -375,7 +376,7 @@ void take_picture() {
     Serial.println("Picture taken");
     digitalWrite(LED_BUILTIN, LOW);
     sendMQTT(fb->buf, fb->len);
-    esp_camera_fb_return(fb); // Must be used to free the memory allocated by esp_camera_fb_get().
+    esp_camera_fb_return(fb); // must be used to free the memory allocated by esp_camera_fb_get().
 }
 
 void set_flash() {
@@ -391,7 +392,7 @@ void set_flash() {
         }
     }
     if (flash) {
-        for (int i = 0; i < 3; {
+        for (int i = 0; i < 3; i++) {
             digitalWrite(LED_BUILTIN, HIGH);
             delay(500);
             digitalWrite(LED_BUILTIN, LOW);
