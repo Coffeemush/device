@@ -22,10 +22,12 @@ const char* mqtt_password = "your_MQTT_PASSWORD";
 const String deviceId = "CM1";
 
 // Light and temperature thresholds
-const float LIGHT_THRESHOLD = 300.0;
-const float TEMPERATURE_THRESHOLD = 30.0;
-const float HUMIDITY_LOW_THRESHOLD = 70.0;
-const float HUMIDITY_HIGH_THRESHOLD = 80.0;
+float lightThreshold = 300.0;
+unsigned long lightAlarmDuration = 5000; // in milliseconds
+unsigned long ventilationDelay = 10000; // in milliseconds
+float temperatureThreshold  = 30.0;
+float humidityLowThreshold = 70.0;
+float humidityHighThreshold = 80.0; 
 
 // Create sensor instances
 SHT2x sht;
@@ -33,7 +35,7 @@ Adafruit_TSL2561_Unified tsl = Adafruit_TSL2561_Unified(TSL2561_ADDR_FLOAT, 1234
 
 // Define pin numbers
 const int switchPin = 13; // Water float switch
-const int fanPin = 4;    // Fan (changed from 4 to 16)
+const int fanPin = 2;    // Fan (changed from 4 (flash) to 2)
 const int valvePin = 12;  // Solenoid valve
 
 // WiFi and MQTT clients
@@ -53,7 +55,9 @@ unsigned long lastFanActivation = 0;
 // Variables for operation duration
 unsigned long fanOnTime = 0;
 unsigned long valveOnTime = 0;
-const unsigned long operationDuration = 5000; // Operation duration in milliseconds (5 seconds)
+unsigned long operationDuration_Fan = 5000; // Operation duration in milliseconds (5 seconds)
+unsigned long operationDuration_Valve = 3000; // Operation duration in milliseconds (3 seconds)
+
 
 bool fanRunning = false;
 bool valveRunning = false;
@@ -69,6 +73,17 @@ bool valveRunning = false;
 const char *topic_PHOTO = "CM1/PICTURE";
 const char *topic_PUBLISH = "CM1/CAM";
 const char *topic_FLASH = "CM1/FLASH";
+
+const char *topic_LIGHT_ALARM_THRESHOLD = "CM1/LIGHT_ALARM_THRESHOLD";
+const char *topic_LIGHT_ALARM_DURATION = "CM1/LIGHT_ALARM_DURATION";
+const char *topic_TEMPERATURE_THRESHOLD = "CM1/TEMPERATURE_THRESHOLD";
+const char *topic_HUMIDITY_LOW_THRESHOLD = "CM1/HUMIDITY_LOW_THRESHOLD";
+const char *topic_HUMIDITY_HIGH_THRESHOLD = "CM1/HUMIDITY_HIGH_THRESHOLD";
+const char *topic_VENTILATION_DELAY = "CM1/VENTILATION_DELAY";
+const char *topic_VENTILATION_DURATION = "CM1/VENTILATION_DURATION";
+const char *topic_VALVE_DURATION = "CM1/VALVE_DURATION";
+
+
 const int MAX_PAYLOAD = 60000;
 
 bool flash;
@@ -127,6 +142,16 @@ void reconnect() {
             Serial.println("connected");
             client.subscribe(topic_PHOTO);
             client.subscribe(topic_FLASH);
+            client.subscribe(topic_LIGHT_ALARM_THRESHOLD);
+            client.subscribe(topic_LIGHT_ALARM_DURATION);
+            client.subscribe(topic_TEMPERATURE_THRESHOLD);
+            client.subscribe(topic_HUMIDITY_LOW_THRESHOLD);
+            client.subscribe(topic_HUMIDITY_HIGH_THRESHOLD);
+            client.subscribe(topic_VENTILATION_DELAY);
+            client.subscribe(topic_VENTILATION_DURATION);
+            client.subscribe(topic_VALVE_DURATION);
+
+
         } else {
             Serial.print("failed, rc=");
             Serial.print(client.state());
@@ -145,9 +170,9 @@ void readTemperature() {
         Serial.println(" °C");
         client.publish((deviceId + "/temperature").c_str(), String(temperature, 1).c_str());
 
-        if (temperature > TEMPERATURE_THRESHOLD) {
+        if (temperature > temperatureThreshold ) {
             unsigned long currentMillis = millis();
-            if (currentMillis - lastFanActivation >= 0.1*60000) { // 5 minutes
+            if (currentMillis - lastFanActivation >= ventilationDelay) {
                 digitalWrite(fanPin, HIGH); // Turn on the fan for ventilation
                 fanOnTime = currentMillis;
                 fanRunning = true;
@@ -169,7 +194,7 @@ void readHumidity() {
         Serial.println(" %");
         client.publish((deviceId + "/humidity").c_str(), String(humidity, 1).c_str());
 
-        if (humidity < HUMIDITY_LOW_THRESHOLD) {
+        if (humidity < humidityLowThreshold) {
             unsigned long currentMillis = millis();
             if (currentMillis - lastValveActivation >= (0.1*60000)) { // 5 minutes
                 digitalWrite(valvePin, HIGH); // Open water valve
@@ -177,7 +202,7 @@ void readHumidity() {
                 valveRunning = true;
                 lastValveActivation = currentMillis; // Update the last valve activation time
             }
-        } else if (humidity > HUMIDITY_HIGH_THRESHOLD) {
+        } else if (humidity > humidityHighThreshold) {
             digitalWrite(valvePin, LOW); // Ensure water valve is closed
             valveRunning = false;
         }
@@ -198,7 +223,7 @@ void readLight() {
         Serial.println(" lux");
         client.publish((deviceId + "/light").c_str(), String(light).c_str());
 
-        if (light > LIGHT_THRESHOLD) {
+        if (light > lightThreshold) {
             client.publish((deviceId + "/light_warning").c_str(), "1");
         } else {
             client.publish((deviceId + "/light_warning").c_str(), "2");
@@ -335,13 +360,13 @@ void loop() {
     }
 
     // Check if fan should be turned off
-    if (fanRunning && (millis() - fanOnTime >= operationDuration)) {
+    if (fanRunning && (millis() - fanOnTime >= operationDuration_Fan)) {
         digitalWrite(fanPin, LOW); // Turn off the fan
         fanRunning = false;
     }
 
     // Check if valve should be turned off
-    if (valveRunning && (millis() - valveOnTime >= operationDuration)) {
+    if (valveRunning && (millis() - valveOnTime >= operationDuration_Valve)) {
         digitalWrite(valvePin, LOW); // Turn off the valve
         valveRunning = false;
     }
@@ -357,8 +382,49 @@ void callback(char* topic, byte* message, unsigned int length) {
     if (String(topic) == topic_PHOTO) {
         take_picture();
     }
-    if (String(topic) == topic_FLASH) {
+    else if (String(topic) == topic_FLASH) {
+        flash = messageTemp.toInt();
         set_flash();
+    }
+    else if (String(topic) == topic_LIGHT_ALARM_THRESHOLD) {
+        lightThreshold = messageTemp.toFloat();
+        Serial.print("New light threshold set to: ");
+        Serial.println(lightThreshold);
+    }
+    else if (String(topic) == topic_LIGHT_ALARM_DURATION) {
+        lightAlarmDuration = messageTemp.toInt();
+        Serial.print("New light alarm duration set to: ");
+        Serial.println(lightAlarmDuration);
+    }
+    else if (String(topic) == topic_TEMPERATURE_THRESHOLD) {
+        temperatureThreshold = messageTemp.toFloat();
+        Serial.print("New temperature threshold set to: ");
+        Serial.println(temperatureThreshold);
+    }
+    else if (String(topic) == topic_HUMIDITY_LOW_THRESHOLD) {
+        humidityLowThreshold = messageTemp.toFloat();
+        Serial.print("New humidity low threshold set to: ");
+        Serial.println(humidityLowThreshold);
+    }
+    else if (String(topic) == topic_HUMIDITY_HIGH_THRESHOLD) {
+        humidityHighThreshold = messageTemp.toFloat();
+        Serial.print("New humidity high threshold set to: ");
+        Serial.println(humidityHighThreshold);
+    }
+    else if (String(topic) == topic_VENTILATION_DELAY) {
+        ventilationDelay = messageTemp.toInt();
+        Serial.print("New ventilation delay set to: ");
+        Serial.println(ventilationDelay);
+    }
+    else if (String(topic) == topic_VENTILATION_DURATION) {
+        operationDuration_Fan = messageTemp.toFloat();
+        Serial.print("New ventilation duration set to: ");
+        Serial.println(operationDuration_Fan);
+    }
+    else if (String(topic) == topic_VALVE_DURATION) {
+        operationDuration_Valve = messageTemp.toFloat();
+        Serial.print("New valve duration set to: ");
+        Serial.println(operationDuration_Valve);
     }
 }
 
